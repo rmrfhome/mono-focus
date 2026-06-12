@@ -65,7 +65,7 @@ Record release-blocking device and Play Console validation in
 grayscale timing, notification delivery while grayscale is active, OEM behavior,
 TalkBack usability, or Play Console submission state.
 
-Current automated coverage includes 97 JVM unit tests for app filtering,
+Current automated coverage includes 101 JVM unit tests for app filtering,
 launchable-app session caching and load-failure handling,
 app-list search/sort/selection presentation and selected-only filtering,
 active selected-app counting and package-removal decisions, including
@@ -76,7 +76,8 @@ mapping, DataStore-backed settings persistence, package-name normalization, and
 defensive normalization of malformed stored values, and the default-off reboot autostart setting,
 cleanup-only boot receiver action filtering,
 engine flow behavior, persisted enabled-state handling, engine service
-start/stop/resume/preflight and foreground-monitoring promotion decisions, permission
+start/stop/resume/preflight and foreground-monitoring promotion decisions, pause
+window calculation and paused-engine behavior, permission
 revocation handling, fatal engine cleanup including cleanup-failure handling,
 bounded grayscale cleanup timeout behavior, zen-rule reconciliation and
 deactivation planning, and fixed-theme contrast targets.

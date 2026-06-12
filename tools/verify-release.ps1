@@ -556,9 +556,10 @@ if ($strings -notmatch '<string\s+name="foreground_service_special_use">Watches 
 if ($strings -notmatch '<string\s+name="monitor_notification_text">MonoFocus is watching selected apps</string>') {
     Fail "Foreground monitoring notification text is missing or unexpected."
 }
-if ($strings -notmatch '<string\s+name="monitor_notification_stop">Stop</string>') {
-    Fail "Foreground monitoring notification Stop action string is missing or unexpected."
-}
+Require-ContentContains $strings '<string name="monitor_notification_paused_until">MonoFocus is paused until %1$s</string>' "Foreground monitoring notification paused text"
+Require-ContentContains $strings '<string name="monitor_notification_pause_15_minutes">Pause 15 min</string>' "Foreground monitoring notification pause action"
+Require-ContentContains $strings '<string name="monitor_notification_pause_until_tomorrow">Until tomorrow</string>' "Foreground monitoring notification pause action"
+Require-ContentContains $strings '<string name="monitor_notification_resume">Resume</string>' "Foreground monitoring notification resume action"
 
 Write-Step "checking Gradle release configuration"
 $appBuildGradle = Get-Content -LiteralPath $appBuildGradlePath -Raw
@@ -682,7 +683,7 @@ $requiredPlayStoreCopy = @(
     '- Foreground service type: `specialUse`.',
     '- Special-use subtype string: "Watches the current foreground package while the user-enabled grayscale engine is active."',
     '- User-visible notification text: "MonoFocus is watching selected apps".',
-    "- User control: the foreground notification includes a Stop action that disables the engine, attempts grayscale deactivation, and stops the service.",
+    "- User control: the foreground notification includes pause actions for 15 minutes and until tomorrow; pausing deactivates grayscale temporarily without turning the engine off.",
     '- Current build config: `minSdk = 35`, `compileSdk = 35`, `targetSdk = 35`.',
     "- Setup required state.",
     "- App list.",
@@ -706,7 +707,7 @@ $requiredDataSafetyCopy = @(
     "- MonoFocus automatic zen rule ID.",
     "These values are not transmitted, sold, shared, or used for advertising or analytics.",
     "- Usage Access: used only to infer the current foreground package. MonoFocus does not read app content, text, images, messages, files, browsing history, or screen contents.",
-    "- Notifications permission: used only to show the persistent foreground-service notification and Stop action while the user-enabled monitoring engine is active.",
+    "- Notifications permission: used only to show the persistent foreground-service notification and pause actions while the user-enabled monitoring engine is active.",
     '- Modes / Do Not Disturb access: used only to manage MonoFocus''s own automatic rule for Android''s grayscale display effect. The rule uses interruption filter `ALL` so MonoFocus does not silence notifications.',
     "- Does the app collect or share any required user data types? No.",
     "- Is all user data encrypted in transit? Not applicable; MonoFocus does not transmit user data.",
@@ -741,7 +742,7 @@ $requiredManualTestCopy = @(
     "MonoFocus rule deleted",
     "Duplicate rule cleanup",
     "Shutdown or power off while active",
-    "Foreground notification Stop action",
+    "Foreground notification pause actions",
     "Reboot before app launch",
     "App launch after reboot",
     "Selected app uninstall",

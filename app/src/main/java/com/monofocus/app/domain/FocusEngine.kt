@@ -15,6 +15,8 @@ class FocusEngine(
     private val foregroundAppDetector: ForegroundAppDetector,
     private val grayscaleController: GrayscaleController,
     private val permissionChecker: PermissionStatusProvider,
+    private val wallClockMillis: () -> Long = System::currentTimeMillis,
+    private val wallClockIntervalMillis: Long = WALL_CLOCK_INTERVAL_MILLIS,
 ) {
     suspend fun run(onStopRequested: suspend (EngineStopReason) -> Unit) {
         var stopReason: EngineStopReason? = null
@@ -31,7 +33,8 @@ class FocusEngine(
         }
 
         try {
-            if (!repository.engineEnabled.first()) {
+            val initialSettings = repository.settings.first()
+            if (!initialSettings.engineEnabled) {
                 stop(EngineStopReason.EngineDisabled)
                 return
             }
@@ -42,7 +45,7 @@ class FocusEngine(
                 return
             }
 
-            if (repository.selectedPackages.first().isEmpty()) {
+            if (initialSettings.selectedPackageNames.isEmpty()) {
                 stop(EngineStopReason.NoSelectedApps)
                 return
             }
@@ -54,22 +57,22 @@ class FocusEngine(
 
             var lastAppliedActive: Boolean? = null
             combine(
-                repository.engineEnabled,
-                repository.selectedPackages,
+                repository.settings,
                 foregroundAppDetector.observeForegroundPackage(),
                 observePermissionState(),
-            ) { engineEnabled, selectedPackages, foregroundPackage, permissions ->
+                observeWallClock(),
+            ) { settings, foregroundPackage, permissions, nowEpochMillis ->
                 EngineInputs(
-                    engineEnabled = engineEnabled,
-                    selectedPackages = selectedPackages,
+                    settings = settings,
                     foregroundPackage = foregroundPackage,
                     permissions = permissions,
+                    nowEpochMillis = nowEpochMillis,
                 )
             }.collect { inputs ->
                 if (!currentCoroutineContext().isActive) return@collect
 
                 when {
-                    !inputs.engineEnabled -> {
+                    !inputs.settings.engineEnabled -> {
                         stop(EngineStopReason.EngineDisabled)
                         throw EngineStoppedException("Engine disabled")
                     }
@@ -77,14 +80,27 @@ class FocusEngine(
                         stop(EngineStopReason.PermissionsMissing)
                         throw EngineStoppedException("Permissions missing")
                     }
-                    inputs.selectedPackages.isEmpty() -> {
+                    inputs.settings.selectedPackageNames.isEmpty() -> {
                         stop(EngineStopReason.NoSelectedApps)
                         throw EngineStoppedException("No selected apps")
                     }
                     else -> {
+                        if (
+                            inputs.settings.pausedUntilEpochMillis > 0L &&
+                            !isPauseActive(
+                                pausedUntilEpochMillis = inputs.settings.pausedUntilEpochMillis,
+                                nowEpochMillis = inputs.nowEpochMillis,
+                            )
+                        ) {
+                            repository.setPausedUntilEpochMillis(0L)
+                        }
+
                         val shouldBeActive = shouldActivateGrayscale(
                             foregroundPackage = inputs.foregroundPackage,
-                            selectedPackages = inputs.selectedPackages,
+                            selectedPackages = inputs.settings.selectedPackageNames,
+                        ) && !isPauseActive(
+                            pausedUntilEpochMillis = inputs.settings.pausedUntilEpochMillis,
+                            nowEpochMillis = inputs.nowEpochMillis,
                         )
                         if (shouldBeActive != lastAppliedActive) {
                             grayscaleController.setGrayscaleActive(shouldBeActive)
@@ -115,15 +131,23 @@ class FocusEngine(
         }
     }.distinctUntilChanged()
 
+    private fun observeWallClock() = flow {
+        while (currentCoroutineContext().isActive) {
+            emit(wallClockMillis())
+            delay(wallClockIntervalMillis)
+        }
+    }
+
     private data class EngineInputs(
-        val engineEnabled: Boolean,
-        val selectedPackages: Set<String>,
+        val settings: AppSettings,
         val foregroundPackage: String?,
         val permissions: com.monofocus.app.platform.PermissionState,
+        val nowEpochMillis: Long,
     )
 
     private companion object {
         const val PERMISSION_CHECK_INTERVAL_MILLIS = 1_000L
+        const val WALL_CLOCK_INTERVAL_MILLIS = 1_000L
     }
 
     private class EngineStoppedException(message: String) : RuntimeException(message)

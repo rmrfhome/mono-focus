@@ -2,6 +2,7 @@ package com.monofocus.app.data
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import java.io.File
@@ -38,6 +39,7 @@ class DataStoreAppSelectionRepositoryTest {
         assertTrue(settings.selectedPackageNames.isEmpty())
         assertFalse(settings.engineEnabled)
         assertNull(settings.zenRuleId)
+        assertEquals(0L, settings.pausedUntilEpochMillis)
         assertFalse(settings.onboardingCompleted)
         assertEquals(0, settings.lastKnownSupportedApi)
         assertFalse(settings.startAfterRebootEnabled)
@@ -60,6 +62,7 @@ class DataStoreAppSelectionRepositoryTest {
         repository.setPackageSelected("com.example.reader", selected = false)
         repository.setEngineEnabled(true)
         repository.setZenRuleId("rule-123")
+        repository.setPausedUntilEpochMillis(123_456L)
         repository.setOnboardingCompleted(true)
         repository.setLastKnownSupportedApi(35)
 
@@ -70,13 +73,16 @@ class DataStoreAppSelectionRepositoryTest {
         val settings = repository.settings.first()
         assertEquals(setOf("com.example.social"), settings.selectedPackageNames)
         assertTrue(settings.engineEnabled)
+        assertEquals(123_456L, settings.pausedUntilEpochMillis)
         assertTrue(settings.onboardingCompleted)
         assertEquals(35, settings.lastKnownSupportedApi)
         assertFalse(settings.startAfterRebootEnabled)
 
         repository.setZenRuleId(null)
+        repository.setPausedUntilEpochMillis(0L)
 
         assertNull(repository.getZenRuleId())
+        assertEquals(0L, repository.settings.first().pausedUntilEpochMillis)
     }
 
     @Test
@@ -107,6 +113,7 @@ class DataStoreAppSelectionRepositoryTest {
         val repository = DataStoreAppSelectionRepository(dataStore)
         val selectedPackagesKey = stringSetPreferencesKey("selected_package_names")
         val zenRuleIdKey = stringPreferencesKey("zen_rule_id")
+        val pausedUntilEpochMillisKey = longPreferencesKey("paused_until_epoch_millis")
 
         dataStore.edit { preferences ->
             preferences[selectedPackagesKey] = setOf(
@@ -116,6 +123,7 @@ class DataStoreAppSelectionRepositoryTest {
                 "com.example.reader",
             )
             preferences[zenRuleIdKey] = "   "
+            preferences[pausedUntilEpochMillisKey] = -1L
         }
 
         assertEquals(
@@ -130,5 +138,6 @@ class DataStoreAppSelectionRepositoryTest {
             settings.selectedPackageNames,
         )
         assertNull(settings.zenRuleId)
+        assertEquals(0L, settings.pausedUntilEpochMillis)
     }
 }

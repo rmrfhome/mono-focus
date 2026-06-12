@@ -119,13 +119,14 @@ Implementation evidence:
 - `FocusEngine` treats deactivation during stop/final cleanup as best effort, so cleanup failures cannot prevent persisted engine disable or service stop callbacks.
 - `FocusEngine` treats expected monitoring stops as normal completion rather than coroutine cancellation, while preserving external cancellation propagation.
 - Foreground service stop, failed-preflight cleanup, service destruction, app shutdown/revocation safety handling, boot cleanup, selected-package removal cleanup, view-model reconciliation, and engine final cleanup all route through the shared bounded best-effort grayscale deactivation helper, so cleanup cannot wait indefinitely on unnecessary deactivation work.
-- `FocusMonitorService` calls `stopSelf()` in a `finally` for the foreground notification Stop action, so a cleanup failure cannot keep the service alive.
-- `PermissionState.ready` requires notification runtime permission so the foreground notification and Stop action can be shown.
+- `FocusMonitorService` notification actions pause grayscale for 15 minutes or until tomorrow without disabling the engine, and pause expiry lets monitoring resume automatically.
+- `FocusMonitorService` keeps the foreground notification visible while paused, and offers a Resume action during an active pause.
+- `PermissionState.ready` requires notification runtime permission so the foreground notification and pause actions can be shown.
 - `FocusMonitorService` checks persisted engine state, current permission readiness, and selected launchable-app availability before foreground promotion, so stale service starts stop instead of entering foreground monitoring when required access or selected apps are missing.
 - `MonoFocusApplication` registers a runtime safety receiver for `ACTION_SHUTDOWN` and `ACTION_NOTIFICATION_POLICY_ACCESS_GRANTED_CHANGED`; on observed policy-access revocation it attempts best-effort deactivation, persists the engine off, and stops `FocusMonitorService`.
 - `BootCleanupReceiver` deactivates the app-owned grayscale rule after normal boot completion without starting `FocusMonitorService` or changing the persisted engine preference.
-- `docs/play-store.md` includes foreground service declaration notes aligned with the manifest special-use subtype, persistent notification, Stop action, local-only behavior, and no-network implementation.
-- `tools/verify-release.ps1` checks the foreground-service special-use subtype, monitoring notification text, and Stop action strings.
+- `docs/play-store.md` includes foreground service declaration notes aligned with the manifest special-use subtype, persistent notification, pause actions, local-only behavior, and no-network implementation.
+- `tools/verify-release.ps1` checks the foreground-service special-use subtype, monitoring notification text, and pause action strings.
 
 Remaining proof:
 
@@ -137,7 +138,7 @@ Remaining proof:
 - Supporting debug-emulator evidence on 2026-06-12 shows reboot while the MonoFocus rule is `STATE_TRUE` completes with `FocusMonitorService` absent and the app-owned rule `STATE_FALSE`; launching MonoFocus after reboot restores monitoring only then, with permissions and selection intact.
 - Supporting debug-emulator evidence on 2026-06-12 after the shared bounded cleanup helper refactor shows switching the engine off after a selected-app activation leaves the engine unchecked, `FocusMonitorService` absent, no destroying service record, no foreground notification, and the current MonoFocus rule `STATE_FALSE`.
 - The adb-only `cmd notification disallow_dnd` path can bypass the normal Settings foreground transition and should not be treated as the user revocation acceptance path.
-- Current build evidence: permission-state, engine permission-revocation, expected-stop completion, internal-error cleanup, cleanup-failure, and bounded cleanup timeout unit tests pass; app/service/application compile.
+- Current build evidence: permission-state, engine permission-revocation, expected-stop completion, internal-error cleanup, cleanup-failure, bounded cleanup timeout, pause-window, and paused-engine behavior unit tests pass; app/service/application compile.
 
 ## AC-8: Rule Deleted
 

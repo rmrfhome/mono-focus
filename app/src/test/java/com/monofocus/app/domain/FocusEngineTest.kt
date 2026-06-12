@@ -43,6 +43,43 @@ class FocusEngineTest {
     }
 
     @Test
+    fun pauseTemporarilyDeactivatesWithoutDisablingEngineAndResumesAfterDeadline() = runTest {
+        var nowEpochMillis = 1_000L
+        val repository = FakeRepository(selectedPackages = setOf("com.example.social"))
+        val detector = FakeForegroundAppDetector(initialPackage = "com.example.social")
+        val controller = FakeGrayscaleController()
+        val engine = FocusEngine(
+            repository = repository,
+            foregroundAppDetector = detector,
+            grayscaleController = controller,
+            permissionChecker = FakePermissions(),
+            wallClockMillis = { nowEpochMillis },
+            wallClockIntervalMillis = 1_000L,
+        )
+
+        val job = launch {
+            engine.run { }
+        }
+        runCurrent()
+
+        repository.setPausedUntilEpochMillis(5_000L)
+        runCurrent()
+
+        assertEquals(listOf(true, false), controller.activeRequests)
+        assertTrue(repository.engineEnabled.firstValue())
+
+        nowEpochMillis = 5_000L
+        advanceTimeBy(1_000L)
+        runCurrent()
+
+        assertEquals(listOf(true, false, true), controller.activeRequests)
+        assertTrue(repository.engineEnabled.firstValue())
+        assertEquals(0L, repository.settings.first().pausedUntilEpochMillis)
+
+        job.cancelAndJoin()
+    }
+
+    @Test
     fun stopsWhenNoAppsAreSelectedBeforeStart() = runTest {
         val repository = FakeRepository(selectedPackages = emptySet())
         val controller = FakeGrayscaleController()
@@ -357,6 +394,12 @@ class FocusEngineTest {
 
         override suspend fun setZenRuleId(ruleId: String?) {
             settingsFlow.value = settingsFlow.value.copy(zenRuleId = ruleId)
+        }
+
+        override suspend fun setPausedUntilEpochMillis(epochMillis: Long) {
+            settingsFlow.value = settingsFlow.value.copy(
+                pausedUntilEpochMillis = epochMillis.coerceAtLeast(0L),
+            )
         }
 
         override suspend fun setOnboardingCompleted(completed: Boolean) {

@@ -22,7 +22,7 @@ Scenarios:
 6. Confirm launchable apps appear and MonoFocus is absent from the list.
 7. Select one social/media app.
 8. Enable the grayscale engine.
-9. Confirm the persistent monitoring notification appears with a Stop action.
+9. Confirm the persistent monitoring notification appears with pause actions for 15 minutes and until tomorrow.
 10. Open the selected app and confirm grayscale within 1.5 seconds.
 11. Open an unselected app and confirm color returns within 1.5 seconds.
 12. Return home and confirm color returns.
@@ -33,7 +33,8 @@ Scenarios:
 17. Delete the MonoFocus Grayscale rule from system settings and restart the engine.
 18. Uninstall a selected app and confirm it is not shown in the active list; if it was the only selected launchable app, confirm the engine stops.
 19. Reinstall that app and confirm it appears selected again.
-20. Disable the engine from the foreground notification Stop action.
+20. Pause from the foreground notification for 15 minutes and verify grayscale returns automatically after the pause expires.
+21. Pause from the foreground notification until tomorrow and verify grayscale stays inactive until the next local day.
 21. Force-stop MonoFocus and confirm grayscale is not left active.
 22. Restart or power off with grayscale active and confirm the device is not left grayscale.
 23. Reboot the device and confirm MonoFocus does not start monitoring silently before the app is launched.

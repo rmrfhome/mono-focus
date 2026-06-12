@@ -142,6 +142,7 @@ class MonoFocusViewModel(
                 )
             ) {
                 EngineToggleAction.EnableAndStart -> {
+                    container.repository.setPausedUntilEpochMillis(0L)
                     container.repository.setEngineEnabled(true)
                     FocusMonitorService.start(context)
                 }
@@ -210,6 +211,7 @@ class MonoFocusViewModel(
 
     private suspend fun disableAndStopEngine() {
         container.repository.setEngineEnabled(false)
+        container.repository.setPausedUntilEpochMillis(0L)
         container.grayscaleController.deactivateBestEffort()
         FocusMonitorService.stop(context)
     }

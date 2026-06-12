@@ -314,7 +314,7 @@ private fun PermissionStatusCard(
                     PermissionLine(
                         icon = Icons.Outlined.WarningAmber,
                         title = "Notifications permission required",
-                        body = "MonoFocus needs this to show the persistent monitoring notification and Stop action while the engine is active.",
+                        body = "MonoFocus needs this to show the persistent monitoring notification and pause actions while the engine is active.",
                     )
                     Button(
                         onClick = onRequestNotificationPermission,

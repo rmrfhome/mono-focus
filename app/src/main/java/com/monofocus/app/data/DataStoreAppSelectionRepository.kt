@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -42,6 +43,8 @@ class DataStoreAppSelectionRepository internal constructor(
                     .normalizedPackageNames(),
                 engineEnabled = preferences[Keys.EngineEnabled] ?: false,
                 zenRuleId = preferences[Keys.ZenRuleId].normalizedRuleId(),
+                pausedUntilEpochMillis = (preferences[Keys.PausedUntilEpochMillis] ?: 0L)
+                    .coerceAtLeast(0L),
                 onboardingCompleted = preferences[Keys.OnboardingCompleted] ?: false,
                 lastKnownSupportedApi = preferences[Keys.LastKnownSupportedApi] ?: 0,
                 startAfterRebootEnabled = preferences[Keys.StartAfterRebootEnabled] ?: false,
@@ -88,6 +91,17 @@ class DataStoreAppSelectionRepository internal constructor(
         }
     }
 
+    override suspend fun setPausedUntilEpochMillis(epochMillis: Long) {
+        dataStore.edit { preferences ->
+            val normalizedEpochMillis = epochMillis.coerceAtLeast(0L)
+            if (normalizedEpochMillis == 0L) {
+                preferences.remove(Keys.PausedUntilEpochMillis)
+            } else {
+                preferences[Keys.PausedUntilEpochMillis] = normalizedEpochMillis
+            }
+        }
+    }
+
     override suspend fun setOnboardingCompleted(completed: Boolean) {
         dataStore.edit { preferences ->
             preferences[Keys.OnboardingCompleted] = completed
@@ -104,6 +118,7 @@ class DataStoreAppSelectionRepository internal constructor(
         val SelectedPackages = stringSetPreferencesKey("selected_package_names")
         val EngineEnabled = booleanPreferencesKey("engine_enabled")
         val ZenRuleId = stringPreferencesKey("zen_rule_id")
+        val PausedUntilEpochMillis = longPreferencesKey("paused_until_epoch_millis")
         val OnboardingCompleted = booleanPreferencesKey("onboarding_completed")
         val LastKnownSupportedApi = intPreferencesKey("last_known_supported_api")
         val StartAfterRebootEnabled = booleanPreferencesKey("start_after_reboot_enabled")

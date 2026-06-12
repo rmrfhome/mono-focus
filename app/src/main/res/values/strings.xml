@@ -6,5 +6,8 @@
     <string name="monitor_channel_name">Grayscale engine</string>
     <string name="monitor_notification_title">MonoFocus</string>
     <string name="monitor_notification_text">MonoFocus is watching selected apps</string>
-    <string name="monitor_notification_stop">Stop</string>
+    <string name="monitor_notification_paused_until">MonoFocus is paused until %1$s</string>
+    <string name="monitor_notification_pause_15_minutes">Pause 15 min</string>
+    <string name="monitor_notification_pause_until_tomorrow">Until tomorrow</string>
+    <string name="monitor_notification_resume">Resume</string>
 </resources>

@@ -13,8 +13,15 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.monofocus.app.MonoFocusApplication
 import com.monofocus.app.R
+import com.monofocus.app.domain.activePauseUntil
 import com.monofocus.app.domain.deactivateBestEffort
 import com.monofocus.app.domain.hasSelectedAvailablePackage
+import com.monofocus.app.domain.pauseForFifteenMinutesFrom
+import com.monofocus.app.domain.pauseUntilTomorrowFrom
+import java.time.Instant
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -31,6 +38,8 @@ class FocusMonitorService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var monitorJob: Job? = null
     private var notificationHealthJob: Job? = null
+    @Volatile
+    private var currentNotificationPauseUntilEpochMillis = 0L
 
     private val container
         get() = (application as MonoFocusApplication).container
@@ -54,6 +63,28 @@ class FocusMonitorService : Service() {
                     }
                 }
                 return START_NOT_STICKY
+            }
+            ACTION_PAUSE_15_MINUTES -> {
+                serviceScope.launch {
+                    pauseMonitoringUntil(
+                        pauseForFifteenMinutesFrom(System.currentTimeMillis()),
+                    )
+                }
+                return START_STICKY
+            }
+            ACTION_PAUSE_UNTIL_TOMORROW -> {
+                serviceScope.launch {
+                    pauseMonitoringUntil(
+                        pauseUntilTomorrowFrom(ZonedDateTime.now()),
+                    )
+                }
+                return START_STICKY
+            }
+            ACTION_RESUME -> {
+                serviceScope.launch {
+                    resumeMonitoring()
+                }
+                return START_STICKY
             }
             else -> return startMonitoring()
         }
@@ -84,9 +115,11 @@ class FocusMonitorService : Service() {
             return START_NOT_STICKY
         }
 
+        val pauseUntilEpochMillis = currentActivePauseUntilEpochMillis()
+        currentNotificationPauseUntilEpochMillis = pauseUntilEpochMillis
         startForeground(
             NOTIFICATION_ID,
-            buildNotification(),
+            buildNotification(pauseUntilEpochMillis),
             ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
         )
         startNotificationHealthCheck()
@@ -150,14 +183,26 @@ class FocusMonitorService : Service() {
         notificationManager.createNotificationChannel(channel)
     }
 
-    private fun buildNotification(): Notification {
-        val stopIntent = Intent(this, FocusMonitorService::class.java)
-            .setAction(ACTION_STOP)
-        val stopPendingIntent = PendingIntent.getService(
-            this,
-            0,
-            stopIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    private suspend fun pauseMonitoringUntil(pausedUntilEpochMillis: Long) {
+        container.repository.setPausedUntilEpochMillis(pausedUntilEpochMillis)
+        container.grayscaleController.deactivateBestEffort()
+        refreshForegroundNotification(
+            activePauseUntil(
+                pausedUntilEpochMillis = pausedUntilEpochMillis,
+                nowEpochMillis = System.currentTimeMillis(),
+            ),
+        )
+    }
+
+    private suspend fun resumeMonitoring() {
+        container.repository.setPausedUntilEpochMillis(0L)
+        refreshForegroundNotification(0L)
+    }
+
+    private fun buildNotification(pauseUntilEpochMillis: Long): Notification {
+        val activePauseUntilEpochMillis = activePauseUntil(
+            pausedUntilEpochMillis = pauseUntilEpochMillis,
+            nowEpochMillis = System.currentTimeMillis(),
         )
         val contentIntent = PendingIntent.getActivity(
             this,
@@ -165,11 +210,19 @@ class FocusMonitorService : Service() {
             Intent(this, com.monofocus.app.MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
+        val contentText = if (activePauseUntilEpochMillis > 0L) {
+            getString(
+                R.string.monitor_notification_paused_until,
+                formatPauseUntil(activePauseUntilEpochMillis),
+            )
+        } else {
+            getString(R.string.monitor_notification_text)
+        }
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_monofocus)
             .setContentTitle(getString(R.string.monitor_notification_title))
-            .setContentText(getString(R.string.monitor_notification_text))
+            .setContentText(contentText)
             .setContentIntent(contentIntent)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
@@ -177,16 +230,69 @@ class FocusMonitorService : Service() {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+
+        if (activePauseUntilEpochMillis > 0L) {
+            builder.addAction(
+                0,
+                getString(R.string.monitor_notification_resume),
+                serviceAction(ACTION_RESUME, requestCode = 2),
+            )
+        }
+
+        return builder
             .addAction(
                 0,
-                getString(R.string.monitor_notification_stop),
-                stopPendingIntent,
+                getString(R.string.monitor_notification_pause_15_minutes),
+                serviceAction(ACTION_PAUSE_15_MINUTES, requestCode = 3),
+            )
+            .addAction(
+                0,
+                getString(R.string.monitor_notification_pause_until_tomorrow),
+                serviceAction(ACTION_PAUSE_UNTIL_TOMORROW, requestCode = 4),
             )
             .build()
             .apply {
                 flags = flags or Notification.FLAG_ONGOING_EVENT or Notification.FLAG_NO_CLEAR
             }
     }
+
+    private fun serviceAction(action: String, requestCode: Int): PendingIntent =
+        PendingIntent.getService(
+            this,
+            requestCode,
+            Intent(this, FocusMonitorService::class.java).setAction(action),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+
+    private suspend fun refreshForegroundNotification(
+        pauseUntilEpochMillis: Long = currentActivePauseUntilEpochMillis(),
+    ) {
+        withContext(Dispatchers.Main.immediate) {
+            runCatching {
+                currentNotificationPauseUntilEpochMillis = pauseUntilEpochMillis
+                startForeground(
+                    NOTIFICATION_ID,
+                    buildNotification(pauseUntilEpochMillis),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+                )
+            }
+        }
+    }
+
+    private fun currentActivePauseUntilEpochMillis(): Long {
+        val pausedUntilEpochMillis = runBlocking(Dispatchers.Default) {
+            container.repository.settings.first().pausedUntilEpochMillis
+        }
+        return activePauseUntil(
+            pausedUntilEpochMillis = pausedUntilEpochMillis,
+            nowEpochMillis = System.currentTimeMillis(),
+        )
+    }
+
+    private fun formatPauseUntil(pauseUntilEpochMillis: Long): String =
+        Instant.ofEpochMilli(pauseUntilEpochMillis)
+            .atZone(ZoneId.systemDefault())
+            .format(PAUSE_UNTIL_FORMATTER)
 
     private fun startNotificationHealthCheck() {
         notificationHealthJob?.cancel()
@@ -196,16 +302,12 @@ class FocusMonitorService : Service() {
                 if (!container.repository.engineEnabled.first()) {
                     continue
                 }
-                if (!isMonitorNotificationVisible()) {
-                    withContext(Dispatchers.Main.immediate) {
-                        runCatching {
-                            startForeground(
-                                NOTIFICATION_ID,
-                                buildNotification(),
-                                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
-                            )
-                        }
-                    }
+                val pauseUntilEpochMillis = currentActivePauseUntilEpochMillis()
+                if (
+                    !isMonitorNotificationVisible() ||
+                    pauseUntilEpochMillis != currentNotificationPauseUntilEpochMillis
+                ) {
+                    refreshForegroundNotification(pauseUntilEpochMillis)
                 }
             }
         }
@@ -223,9 +325,15 @@ class FocusMonitorService : Service() {
     companion object {
         private const val ACTION_START = "com.monofocus.app.action.START_MONITORING"
         private const val ACTION_STOP = "com.monofocus.app.action.STOP_MONITORING"
+        private const val ACTION_PAUSE_15_MINUTES =
+            "com.monofocus.app.action.PAUSE_15_MINUTES"
+        private const val ACTION_PAUSE_UNTIL_TOMORROW =
+            "com.monofocus.app.action.PAUSE_UNTIL_TOMORROW"
+        private const val ACTION_RESUME = "com.monofocus.app.action.RESUME_MONITORING"
         private const val CHANNEL_ID = "focus_monitor"
         private const val NOTIFICATION_ID = 1001
         private const val NOTIFICATION_HEALTH_CHECK_INTERVAL_MILLIS = 5_000L
+        private val PAUSE_UNTIL_FORMATTER = DateTimeFormatter.ofPattern("EEE HH:mm")
 
         fun start(context: Context) {
             val intent = Intent(context, FocusMonitorService::class.java)

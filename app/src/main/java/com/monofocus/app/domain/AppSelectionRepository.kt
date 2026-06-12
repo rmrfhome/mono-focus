@@ -11,6 +11,7 @@ interface AppSelectionRepository {
     suspend fun setEngineEnabled(enabled: Boolean)
     suspend fun getZenRuleId(): String?
     suspend fun setZenRuleId(ruleId: String?)
+    suspend fun setPausedUntilEpochMillis(epochMillis: Long)
     suspend fun setOnboardingCompleted(completed: Boolean)
     suspend fun setLastKnownSupportedApi(api: Int)
 }
@@ -19,6 +20,7 @@ data class AppSettings(
     val selectedPackageNames: Set<String> = emptySet(),
     val engineEnabled: Boolean = false,
     val zenRuleId: String? = null,
+    val pausedUntilEpochMillis: Long = 0L,
     val onboardingCompleted: Boolean = false,
     val lastKnownSupportedApi: Int = 0,
     val startAfterRebootEnabled: Boolean = false,

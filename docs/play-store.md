@@ -21,7 +21,7 @@ Requirements: Android 15 or newer. Usage Access and Modes / Do Not Disturb acces
 - Local app data: selected package names are stored locally in private app storage.
 - Network access: none. The app does not declare `INTERNET`.
 - Analytics and ads: none.
-- Notifications permission: used only to show the persistent monitoring notification and Stop action while the user-enabled engine is active.
+- Notifications permission: used only to show the persistent monitoring notification and pause actions while the user-enabled engine is active.
 - Boot completed permission: used only to deactivate a stale app-owned grayscale rule after reboot; it does not start monitoring.
 - Detailed worksheet: `docs/data-safety.md`.
 
@@ -30,7 +30,7 @@ Requirements: Android 15 or newer. Usage Access and Modes / Do Not Disturb acces
 - Foreground service type: `specialUse`.
 - Special-use subtype string: "Watches the current foreground package while the user-enabled grayscale engine is active."
 - User-visible notification text: "MonoFocus is watching selected apps".
-- User control: the foreground notification includes a Stop action that disables the engine, attempts grayscale deactivation, and stops the service.
+- User control: the foreground notification includes pause actions for 15 minutes and until tomorrow; pausing deactivates grayscale temporarily without turning the engine off.
 - Service scope: runs only while the user-enabled grayscale engine is active and local preflight checks pass.
 - Network behavior: no network operations; the app does not declare `INTERNET`.
 - Purpose: required so MonoFocus can keep detecting the current foreground app while the user opens other apps and can apply or remove the app-owned grayscale rule promptly.

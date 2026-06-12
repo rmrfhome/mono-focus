@@ -24,7 +24,7 @@ These values are not transmitted, sold, shared, or used for advertising or analy
 ## Android Accesses
 
 - Usage Access: used only to infer the current foreground package. MonoFocus does not read app content, text, images, messages, files, browsing history, or screen contents.
-- Notifications permission: used only to show the persistent foreground-service notification and Stop action while the user-enabled monitoring engine is active.
+- Notifications permission: used only to show the persistent foreground-service notification and pause actions while the user-enabled monitoring engine is active.
 - Modes / Do Not Disturb access: used only to manage MonoFocus's own automatic rule for Android's grayscale display effect. The rule uses interruption filter `ALL` so MonoFocus does not silence notifications.
 - Boot completed permission: used only to deactivate MonoFocus's own grayscale rule after reboot. It does not start foreground monitoring or collect data.
 
