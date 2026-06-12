@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MonoFocus</string>
+    <string name="automatic_rule_type">Selected app grayscale</string>
+    <string name="foreground_service_special_use">Watches the current foreground package while the user-enabled grayscale engine is active.</string>
+    <string name="monitor_channel_name">Grayscale engine</string>
+    <string name="monitor_notification_title">MonoFocus</string>
+    <string name="monitor_notification_text">MonoFocus is watching selected apps</string>
+    <string name="monitor_notification_stop">Stop</string>
+</resources>
