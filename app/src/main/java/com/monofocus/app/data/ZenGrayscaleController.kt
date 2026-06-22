@@ -92,7 +92,7 @@ class ZenGrayscaleController(
         if (!ensureReady()) {
             throw IllegalStateException("MonoFocus grayscale rule is unavailable")
         }
-        if (lastRequestedActive == active) return
+        if (!active && lastRequestedActive == active) return
 
         val ruleId = repository.getZenRuleId()
             ?: throw IllegalStateException("MonoFocus grayscale rule ID is unavailable")

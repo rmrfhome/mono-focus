@@ -2,12 +2,13 @@ package com.monofocus.app.ui
 
 internal enum class EngineToggleAction {
     EnableAndStart,
+    EnableWithoutStarting,
     DisableAndStop,
 }
 
 internal enum class EngineResumeAction {
     EnsureRuleAndStart,
-    DisableAndStop,
+    StopMonitoringOnly,
     DeactivateOnly,
 }
 
@@ -16,10 +17,10 @@ internal fun chooseEngineToggleAction(
     permissionsReady: Boolean,
     hasSelectedApps: Boolean,
 ): EngineToggleAction =
-    if (requestedEnabled && permissionsReady && hasSelectedApps) {
-        EngineToggleAction.EnableAndStart
-    } else {
-        EngineToggleAction.DisableAndStop
+    when {
+        requestedEnabled && permissionsReady && hasSelectedApps -> EngineToggleAction.EnableAndStart
+        requestedEnabled -> EngineToggleAction.EnableWithoutStarting
+        else -> EngineToggleAction.DisableAndStop
     }
 
 internal fun chooseEngineResumeAction(
@@ -29,6 +30,6 @@ internal fun chooseEngineResumeAction(
 ): EngineResumeAction =
     when {
         engineEnabled && permissionsReady && hasSelectedApps -> EngineResumeAction.EnsureRuleAndStart
-        engineEnabled -> EngineResumeAction.DisableAndStop
+        engineEnabled -> EngineResumeAction.StopMonitoringOnly
         else -> EngineResumeAction.DeactivateOnly
     }

@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.monofocus.app.domain.AppSelectionRepository
 import com.monofocus.app.domain.AppSettings
+import com.monofocus.app.domain.EngineStopReason
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -42,6 +43,7 @@ class DataStoreAppSelectionRepository internal constructor(
                     .orEmpty()
                     .normalizedPackageNames(),
                 engineEnabled = preferences[Keys.EngineEnabled] ?: false,
+                lastEngineStopReason = preferences[Keys.LastEngineStopReason].toEngineStopReason(),
                 zenRuleId = preferences[Keys.ZenRuleId].normalizedRuleId(),
                 pausedUntilEpochMillis = (preferences[Keys.PausedUntilEpochMillis] ?: 0L)
                     .coerceAtLeast(0L),
@@ -74,6 +76,16 @@ class DataStoreAppSelectionRepository internal constructor(
     override suspend fun setEngineEnabled(enabled: Boolean) {
         dataStore.edit { preferences ->
             preferences[Keys.EngineEnabled] = enabled
+        }
+    }
+
+    override suspend fun setLastEngineStopReason(reason: EngineStopReason?) {
+        dataStore.edit { preferences ->
+            if (reason == null) {
+                preferences.remove(Keys.LastEngineStopReason)
+            } else {
+                preferences[Keys.LastEngineStopReason] = reason.name
+            }
         }
     }
 
@@ -117,6 +129,7 @@ class DataStoreAppSelectionRepository internal constructor(
     private object Keys {
         val SelectedPackages = stringSetPreferencesKey("selected_package_names")
         val EngineEnabled = booleanPreferencesKey("engine_enabled")
+        val LastEngineStopReason = stringPreferencesKey("last_engine_stop_reason")
         val ZenRuleId = stringPreferencesKey("zen_rule_id")
         val PausedUntilEpochMillis = longPreferencesKey("paused_until_epoch_millis")
         val OnboardingCompleted = booleanPreferencesKey("onboarding_completed")
@@ -132,3 +145,8 @@ private fun Set<String>.normalizedPackageNames(): Set<String> =
 
 private fun String?.normalizedRuleId(): String? =
     this?.trim()?.takeIf { ruleId -> ruleId.isNotBlank() }
+
+private fun String?.toEngineStopReason(): EngineStopReason? =
+    this?.trim()?.takeIf { value -> value.isNotBlank() }?.let { value ->
+        runCatching { EngineStopReason.valueOf(value) }.getOrNull()
+    }

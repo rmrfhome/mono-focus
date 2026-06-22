@@ -243,7 +243,9 @@ $manualTestResultsPath = Require-File (Join-Path $repoRoot "docs/manual-test-res
 
 $resolvedSdkDir = Get-ConfiguredSdkDir
 $aaptPath = Find-Aapt $resolvedSdkDir
-$expectedApplicationId = "com.monofocus.app"
+$expectedApplicationId = "com.rmrfhome.monofocus"
+$expectedNamespace = "com.monofocus.app"
+$expectedDynamicReceiverPermission = "$expectedApplicationId.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
 $expectedVersionCode = "1"
 $expectedVersionName = "0.1.0"
 
@@ -301,7 +303,7 @@ if ($unexpectedAndroidPermissions.Count -gt 0) {
 }
 
 $allowedNonAndroidUsesPermissions = @(
-    "com.monofocus.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+    $expectedDynamicReceiverPermission
 )
 $unexpectedNonAndroidPermissions = @(
     $usesPermissions |
@@ -401,7 +403,7 @@ $requiredAabManifestMarkers = @(
     "android.permission.FOREGROUND_SERVICE",
     "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
     "android.permission.RECEIVE_BOOT_COMPLETED",
-    "com.monofocus.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+    $expectedDynamicReceiverPermission,
     "android.intent.action.MAIN",
     "android.intent.category.LAUNCHER",
     "android.app.action.AUTOMATIC_ZEN_RULE",
@@ -460,7 +462,7 @@ $bootCompletedActions = @([regex]::Matches($releaseManifest, 'android\.intent\.a
 if ($bootCompletedActions.Count -ne 1) {
     Fail "Release manifest must declare exactly one BOOT_COMPLETED action for cleanup-only rule deactivation."
 }
-if ($releaseManifest -notmatch '(?s)<permission\b[^>]*android:name="com\.monofocus\.app\.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"[^>]*android:protectionLevel="signature"\s*/>') {
+if ($releaseManifest -notmatch "(?s)<permission\b[^>]*android:name=`"$([regex]::Escape($expectedDynamicReceiverPermission))`"[^>]*android:protectionLevel=`"signature`"\s*/>") {
     Fail "Release manifest is missing the expected app-private AndroidX dynamic receiver permission."
 }
 $declaredPermissions = @(
@@ -469,7 +471,7 @@ $declaredPermissions = @(
 )
 $unexpectedDeclaredPermissions = @(
     $declaredPermissions |
-        Where-Object { $_ -ne "com.monofocus.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" }
+        Where-Object { $_ -ne $expectedDynamicReceiverPermission }
 )
 if ($unexpectedDeclaredPermissions.Count -gt 0) {
     Fail "Unexpected custom permission declarations: $($unexpectedDeclaredPermissions -join ', ')"
@@ -563,11 +565,11 @@ Require-ContentContains $strings '<string name="monitor_notification_resume">Res
 
 Write-Step "checking Gradle release configuration"
 $appBuildGradle = Get-Content -LiteralPath $appBuildGradlePath -Raw
-if ($appBuildGradle -notmatch 'namespace\s*=\s*"com\.monofocus\.app"') {
-    Fail "Gradle namespace is not com.monofocus.app."
+if ($appBuildGradle -notmatch "namespace\s*=\s*`"$([regex]::Escape($expectedNamespace))`"") {
+    Fail "Gradle namespace is not $expectedNamespace."
 }
-if ($appBuildGradle -notmatch 'applicationId\s*=\s*"com\.monofocus\.app"') {
-    Fail "Gradle applicationId is not com.monofocus.app."
+if ($appBuildGradle -notmatch "applicationId\s*=\s*`"$([regex]::Escape($expectedApplicationId))`"") {
+    Fail "Gradle applicationId is not $expectedApplicationId."
 }
 if ($appBuildGradle -notmatch 'compileSdk\s*=\s*35') {
     Fail "Gradle compileSdk is not 35."

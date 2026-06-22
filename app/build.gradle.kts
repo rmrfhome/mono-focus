@@ -9,7 +9,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.monofocus.app"
+        applicationId = "com.rmrfhome.monofocus"
         minSdk = 35
         targetSdk = 35
         versionCode = 1

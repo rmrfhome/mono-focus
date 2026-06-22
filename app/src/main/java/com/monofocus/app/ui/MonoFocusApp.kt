@@ -1,5 +1,11 @@
 package com.monofocus.app.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,6 +30,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Apps
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
@@ -38,6 +45,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -53,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -61,6 +70,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.monofocus.app.domain.AppEntry
+import com.monofocus.app.domain.EngineStopReason
 
 @Composable
 fun MonoFocusApp(
@@ -105,6 +115,8 @@ fun MainScreen(
     onOpenNotificationPolicySettings: () -> Unit,
     onShowPrivacy: () -> Unit,
 ) {
+    val context = LocalContext.current
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -141,6 +153,7 @@ fun MainScreen(
                     enabled = state.engineEnabled,
                     canEnable = state.canEnableEngine,
                     setupRequired = state.setupRequired,
+                    lastEngineStopReason = state.lastEngineStopReason,
                     selectedPackageCount = state.selectedPackageCount,
                     onEnabledChanged = onEngineEnabledChanged,
                 )
@@ -151,6 +164,12 @@ fun MainScreen(
                     onOpenUsageSettings = onOpenUsageSettings,
                     onRequestNotificationPermission = onRequestNotificationPermission,
                     onOpenNotificationPolicySettings = onOpenNotificationPolicySettings,
+                    onCopyDiagnostics = {
+                        copyDiagnosticsToClipboard(
+                            context = context,
+                            state = state,
+                        )
+                    },
                 )
             }
             item {
@@ -214,6 +233,7 @@ private fun EngineSection(
     enabled: Boolean,
     canEnable: Boolean,
     setupRequired: Boolean,
+    lastEngineStopReason: EngineStopReason?,
     selectedPackageCount: Int,
     onEnabledChanged: (Boolean) -> Unit,
 ) {
@@ -237,14 +257,13 @@ private fun EngineSection(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
-                val status = when {
-                    setupRequired -> "Setup required before grayscale can work."
-                    selectedPackageCount == 0 -> "Select apps that should appear in grayscale."
-                    enabled -> "Selected apps will become grayscale while open."
-                    else -> "Ready"
-                }
                 Text(
-                    text = status,
+                    text = engineStatusText(
+                        enabled = enabled,
+                        setupRequired = setupRequired,
+                        selectedPackageCount = selectedPackageCount,
+                        lastEngineStopReason = lastEngineStopReason,
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -263,12 +282,34 @@ private fun EngineSection(
     }
 }
 
+private fun engineStatusText(
+    enabled: Boolean,
+    setupRequired: Boolean,
+    selectedPackageCount: Int,
+    lastEngineStopReason: EngineStopReason?,
+): String =
+    when {
+        lastEngineStopReason == EngineStopReason.RuleUnavailable && enabled ->
+            "Engine is on, but this device rejected Android's grayscale rule."
+        lastEngineStopReason == EngineStopReason.RuleUnavailable ->
+            "This device rejected Android's grayscale rule."
+        lastEngineStopReason == EngineStopReason.InternalError ->
+            "Monitoring stopped after an internal error."
+        setupRequired && enabled -> "Engine is on. Setup is required before grayscale can run."
+        setupRequired -> "Setup required before grayscale can work."
+        selectedPackageCount == 0 && enabled -> "Engine is on. Select apps to grayscale."
+        selectedPackageCount == 0 -> "Select apps that should appear in grayscale."
+        enabled -> "Selected apps will become grayscale while open."
+        else -> "Ready"
+    }
+
 @Composable
 private fun PermissionStatusCard(
     state: MonoFocusUiState,
     onOpenUsageSettings: () -> Unit,
     onRequestNotificationPermission: () -> Unit,
     onOpenNotificationPolicySettings: () -> Unit,
+    onCopyDiagnostics: () -> Unit,
 ) {
     Card(
         modifier = Modifier
@@ -341,9 +382,61 @@ private fun PermissionStatusCard(
                     }
                 }
             }
+            OutlinedButton(
+                onClick = onCopyDiagnostics,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .semantics {
+                        contentDescription = "Copy diagnostics"
+                    },
+            ) {
+                Icon(Icons.Outlined.ContentCopy, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Copy diagnostics", maxLines = 2)
+            }
         }
     }
 }
+
+private fun copyDiagnosticsToClipboard(
+    context: Context,
+    state: MonoFocusUiState,
+) {
+    val diagnostics = buildDiagnosticsText(
+        state = state,
+        appPackageName = context.packageName,
+        appVersionName = context.appVersionName(),
+        appVersionCode = context.appVersionCode(),
+        androidRelease = Build.VERSION.RELEASE.orUnknown(),
+        sdkInt = Build.VERSION.SDK_INT,
+        manufacturer = Build.MANUFACTURER.orUnknown(),
+        brand = Build.BRAND.orUnknown(),
+        model = Build.MODEL.orUnknown(),
+        device = Build.DEVICE.orUnknown(),
+    )
+    val clipboard = context.getSystemService(ClipboardManager::class.java)
+    clipboard.setPrimaryClip(
+        ClipData.newPlainText("MonoFocus diagnostics", diagnostics),
+    )
+    Toast.makeText(context, "Diagnostics copied", Toast.LENGTH_SHORT).show()
+}
+
+private fun Context.appVersionName(): String =
+    runCatching { packageInfo().versionName.orUnknown() }
+        .getOrDefault("unknown")
+
+private fun Context.appVersionCode(): Long =
+    runCatching { packageInfo().longVersionCode }
+        .getOrDefault(0L)
+
+private fun Context.packageInfo() =
+    packageManager.getPackageInfo(
+        packageName,
+        PackageManager.PackageInfoFlags.of(0),
+    )
+
+private fun String?.orUnknown(): String =
+    this?.takeIf { value -> value.isNotBlank() } ?: "unknown"
 
 @Composable
 private fun PermissionLine(

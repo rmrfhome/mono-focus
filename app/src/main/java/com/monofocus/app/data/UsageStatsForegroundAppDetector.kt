@@ -229,12 +229,9 @@ internal class ForegroundUsageEventState(
                                 className = event.className,
                             )
                         }
-                        if (
-                            activePackage == packageName &&
-                            activeActivityTokens.none { it.packageName == packageName }
-                        ) {
-                            activePackage = null
-                        }
+                        // During canceled system gestures Android can emit a pause/background
+                        // event without a matching foreground event. Keep the last visible app
+                        // until another package is observed in the foreground.
                     }
                 }
             }

@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import com.monofocus.app.domain.EngineStopReason
 import java.io.File
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
@@ -39,6 +40,7 @@ class DataStoreAppSelectionRepositoryTest {
         assertTrue(settings.selectedPackageNames.isEmpty())
         assertFalse(settings.engineEnabled)
         assertNull(settings.zenRuleId)
+        assertNull(settings.lastEngineStopReason)
         assertEquals(0L, settings.pausedUntilEpochMillis)
         assertFalse(settings.onboardingCompleted)
         assertEquals(0, settings.lastKnownSupportedApi)
@@ -61,6 +63,7 @@ class DataStoreAppSelectionRepositoryTest {
         repository.setPackageSelected("com.example.reader", selected = true)
         repository.setPackageSelected("com.example.reader", selected = false)
         repository.setEngineEnabled(true)
+        repository.setLastEngineStopReason(EngineStopReason.RuleUnavailable)
         repository.setZenRuleId("rule-123")
         repository.setPausedUntilEpochMillis(123_456L)
         repository.setOnboardingCompleted(true)
@@ -73,15 +76,18 @@ class DataStoreAppSelectionRepositoryTest {
         val settings = repository.settings.first()
         assertEquals(setOf("com.example.social"), settings.selectedPackageNames)
         assertTrue(settings.engineEnabled)
+        assertEquals(EngineStopReason.RuleUnavailable, settings.lastEngineStopReason)
         assertEquals(123_456L, settings.pausedUntilEpochMillis)
         assertTrue(settings.onboardingCompleted)
         assertEquals(35, settings.lastKnownSupportedApi)
         assertFalse(settings.startAfterRebootEnabled)
 
         repository.setZenRuleId(null)
+        repository.setLastEngineStopReason(null)
         repository.setPausedUntilEpochMillis(0L)
 
         assertNull(repository.getZenRuleId())
+        assertNull(repository.settings.first().lastEngineStopReason)
         assertEquals(0L, repository.settings.first().pausedUntilEpochMillis)
     }
 
@@ -113,6 +119,7 @@ class DataStoreAppSelectionRepositoryTest {
         val repository = DataStoreAppSelectionRepository(dataStore)
         val selectedPackagesKey = stringSetPreferencesKey("selected_package_names")
         val zenRuleIdKey = stringPreferencesKey("zen_rule_id")
+        val lastEngineStopReasonKey = stringPreferencesKey("last_engine_stop_reason")
         val pausedUntilEpochMillisKey = longPreferencesKey("paused_until_epoch_millis")
 
         dataStore.edit { preferences ->
@@ -123,6 +130,7 @@ class DataStoreAppSelectionRepositoryTest {
                 "com.example.reader",
             )
             preferences[zenRuleIdKey] = "   "
+            preferences[lastEngineStopReasonKey] = "not-a-stop-reason"
             preferences[pausedUntilEpochMillisKey] = -1L
         }
 
@@ -138,6 +146,7 @@ class DataStoreAppSelectionRepositoryTest {
             settings.selectedPackageNames,
         )
         assertNull(settings.zenRuleId)
+        assertNull(settings.lastEngineStopReason)
         assertEquals(0L, settings.pausedUntilEpochMillis)
     }
 }

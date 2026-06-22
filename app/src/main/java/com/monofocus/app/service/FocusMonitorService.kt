@@ -15,6 +15,7 @@ import com.monofocus.app.MonoFocusApplication
 import com.monofocus.app.R
 import com.monofocus.app.domain.activePauseUntil
 import com.monofocus.app.domain.deactivateBestEffort
+import com.monofocus.app.domain.EngineStopReason
 import com.monofocus.app.domain.hasSelectedAvailablePackage
 import com.monofocus.app.domain.pauseForFifteenMinutesFrom
 import com.monofocus.app.domain.pauseUntilTomorrowFrom
@@ -56,6 +57,7 @@ class FocusMonitorService : Service() {
                 notificationHealthJob?.cancel()
                 serviceScope.launch {
                     try {
+                        container.repository.setLastEngineStopReason(null)
                         container.repository.setEngineEnabled(false)
                         container.grayscaleController.deactivateBestEffort()
                     } finally {
@@ -104,17 +106,20 @@ class FocusMonitorService : Service() {
     }
 
     private fun startMonitoring(): Int {
-        val canStartMonitoring = runBlocking(Dispatchers.Default) {
+        val startBlockReason = runBlocking(Dispatchers.Default) {
             runCatching {
-                canStartForegroundMonitoring()
-            }.getOrDefault(false)
+                foregroundMonitoringStartBlockReason()
+            }.getOrDefault(EngineStopReason.InternalError)
         }
 
-        if (!canStartMonitoring) {
-            stopWithoutMonitoring()
+        if (startBlockReason != null) {
+            stopWithoutMonitoring(startBlockReason)
             return START_NOT_STICKY
         }
 
+        runBlocking(Dispatchers.Default) {
+            container.repository.setLastEngineStopReason(null)
+        }
         val pauseUntilEpochMillis = currentActivePauseUntilEpochMillis()
         currentNotificationPauseUntilEpochMillis = pauseUntilEpochMillis
         startForeground(
@@ -135,12 +140,15 @@ class FocusMonitorService : Service() {
         return START_STICKY
     }
 
-    private fun stopWithoutMonitoring() {
+    private fun stopWithoutMonitoring(reason: EngineStopReason) {
         monitorJob?.cancel()
         notificationHealthJob?.cancel()
         serviceScope.launch {
             try {
-                container.repository.setEngineEnabled(false)
+                container.repository.setLastEngineStopReason(reason)
+                if (reason == EngineStopReason.EngineDisabled || reason == EngineStopReason.InternalError) {
+                    container.repository.setEngineEnabled(false)
+                }
                 container.grayscaleController.deactivateBestEffort()
             } finally {
                 stopSelf()
@@ -148,12 +156,17 @@ class FocusMonitorService : Service() {
         }
     }
 
-    private suspend fun canStartForegroundMonitoring(): Boolean =
-        shouldStartForegroundMonitoring(
-            engineEnabled = container.repository.engineEnabled.first(),
-            permissionsReady = container.permissionChecker.currentState().ready,
-            hasSelectedLaunchableApps = hasSelectedLaunchableApps(),
+    private suspend fun foregroundMonitoringStartBlockReason(): EngineStopReason? {
+        val engineEnabled = container.repository.engineEnabled.first()
+        val permissionsReady = container.permissionChecker.currentState().ready
+        val hasSelectedLaunchableApps = hasSelectedLaunchableApps()
+
+        return monitoringStartBlockReason(
+            engineEnabled = engineEnabled,
+            permissionsReady = permissionsReady,
+            hasSelectedLaunchableApps = hasSelectedLaunchableApps,
         )
+    }
 
     private suspend fun hasSelectedLaunchableApps(): Boolean {
         val selectedPackages = container.repository.selectedPackages.first()
@@ -346,6 +359,12 @@ class FocusMonitorService : Service() {
                 .setAction(ACTION_STOP)
             runCatching {
                 context.startService(intent)
+            }
+        }
+
+        fun stopMonitoringOnly(context: Context) {
+            runCatching {
+                context.stopService(Intent(context, FocusMonitorService::class.java))
             }
         }
     }

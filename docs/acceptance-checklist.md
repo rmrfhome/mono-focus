@@ -12,8 +12,8 @@ Implementation evidence:
 - `AndroidManifest.xml` declares `android.permission.ACCESS_NOTIFICATION_POLICY`, so Android Settings exposes MonoFocus in Do Not Disturb access.
 - `tools/verify-release.ps1` checks the required setup and main-screen copy in the release source.
 - `tools/verify-release.ps1` checks the expected Android permission surface, including `ACCESS_NOTIFICATION_POLICY`.
-- `MonoFocusViewModel.setEngineEnabled` refuses to start the engine without every required permission.
-- `chooseEngineToggleAction` only allows service start when the user requested enable, permissions are ready, and at least one app is selected.
+- `MonoFocusViewModel.setEngineEnabled` persists the user's engine intent, but refuses to start monitoring without every required permission.
+- `chooseEngineToggleAction` only allows service start when the user requested enable, permissions are ready, and at least one app is selected; otherwise it stores the enabled intent without starting monitoring.
 - `MonoFocusViewModel.disableAndStopEngine` persists the disabled state and attempts best-effort grayscale deactivation before stopping the monitoring service.
 
 Remaining proof:
@@ -77,7 +77,7 @@ Implementation evidence:
 - `FocusEngine` refuses to run when the persisted engine setting is off and stops if it becomes off while monitoring.
 - `FocusEngine` activates grayscale only when the foreground package is selected.
 - `chooseEngineResumeAction` restarts monitoring on app resume only when the persisted engine flag is enabled, permissions are ready, and selected apps exist.
-- `MonoFocusViewModel` runs the same reconciliation after the initial app-list load, so app launch after reboot/process death restores or disables the persisted engine state based on current permissions and launchable selections.
+- `MonoFocusViewModel` runs the same reconciliation after the initial app-list load, so app launch after reboot/process death restores monitoring when current permissions and launchable selections allow it, or stops monitoring while preserving the user's enabled intent when runtime setup is blocked.
 - The strict minimal v1 does not start monitoring on boot. `BootCleanupReceiver` handles only `BOOT_COMPLETED` to deactivate a stale app-owned grayscale rule, and `tools/verify-release.ps1` enforces this cleanup-only receiver shape.
 - `FocusMonitorService` uses the same preflight invariant before foreground promotion after a service start or sticky restart.
 - `ZenGrayscaleController` uses `AutomaticZenRule`, `ZenDeviceEffects.setShouldDisplayGrayscale(true)`, and `setAutomaticZenRuleState`.
@@ -110,20 +110,20 @@ Implementation evidence:
 
 - `FocusEngine` checks permissions before and during monitoring.
 - `FocusEngine` polls required permission state while monitoring, so revocation can be detected even if the foreground app does not change.
-- `FocusEngine` disables the engine and deactivates grayscale if foreground detection or grayscale activation fails internally.
+- `FocusEngine` records runtime stop reasons and deactivates grayscale if foreground detection or grayscale activation fails internally; recoverable runtime blockers such as missing permissions, missing selected apps, or an unavailable grayscale rule stop monitoring without clearing the user's enabled intent.
 - UI-side disable/stop paths also attempt best-effort grayscale deactivation before stopping the monitoring service.
 - `UsageStatsForegroundAppDetector` emits `null` and stops when Usage Access is revoked.
 - `ZenGrayscaleController.setGrayscaleActive` throws when rule preparation or `setAutomaticZenRuleState` fails, so the engine can stop instead of silently assuming grayscale state changed.
 - `ZenGrayscaleController.deactivate` attempts to deactivate the stored rule ID first, falls back to rule discovery only while policy access is available, and treats cleanup as best effort.
 - `ZenGrayscaleController.deactivate` no longer rewrites the already-stored rule ID on normal cleanup; it only persists a fallback-discovered rule ID when the stored ID was missing or stale.
-- `FocusEngine` treats deactivation during stop/final cleanup as best effort, so cleanup failures cannot prevent persisted engine disable or service stop callbacks.
+- `FocusEngine` treats deactivation during stop/final cleanup as best effort, so cleanup failures cannot prevent stop callbacks or explicit user disable persistence.
 - `FocusEngine` treats expected monitoring stops as normal completion rather than coroutine cancellation, while preserving external cancellation propagation.
 - Foreground service stop, failed-preflight cleanup, service destruction, app shutdown/revocation safety handling, boot cleanup, selected-package removal cleanup, view-model reconciliation, and engine final cleanup all route through the shared bounded best-effort grayscale deactivation helper, so cleanup cannot wait indefinitely on unnecessary deactivation work.
 - `FocusMonitorService` notification actions pause grayscale for 15 minutes or until tomorrow without disabling the engine, and pause expiry lets monitoring resume automatically.
 - `FocusMonitorService` keeps the foreground notification visible while paused, and offers a Resume action during an active pause.
 - `PermissionState.ready` requires notification runtime permission so the foreground notification and pause actions can be shown.
-- `FocusMonitorService` checks persisted engine state, current permission readiness, and selected launchable-app availability before foreground promotion, so stale service starts stop instead of entering foreground monitoring when required access or selected apps are missing.
-- `MonoFocusApplication` registers a runtime safety receiver for `ACTION_SHUTDOWN` and `ACTION_NOTIFICATION_POLICY_ACCESS_GRANTED_CHANGED`; on observed policy-access revocation it attempts best-effort deactivation, persists the engine off, and stops `FocusMonitorService`.
+- `FocusMonitorService` checks persisted engine state, current permission readiness, and selected launchable-app availability before foreground promotion, so stale service starts stop instead of entering foreground monitoring when required access or selected apps are missing, while preserving the user's enabled intent for recoverable blockers.
+- `MonoFocusApplication` registers a runtime safety receiver for `ACTION_SHUTDOWN` and `ACTION_NOTIFICATION_POLICY_ACCESS_GRANTED_CHANGED`; on observed policy-access revocation it attempts best-effort deactivation, records a permissions-missing stop reason, and stops monitoring without clearing the user's enabled intent.
 - `BootCleanupReceiver` deactivates the app-owned grayscale rule after normal boot completion without starting `FocusMonitorService` or changing the persisted engine preference.
 - `docs/play-store.md` includes foreground service declaration notes aligned with the manifest special-use subtype, persistent notification, pause actions, local-only behavior, and no-network implementation.
 - `tools/verify-release.ps1` checks the foreground-service special-use subtype, monitoring notification text, and pause action strings.

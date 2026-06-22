@@ -23,7 +23,7 @@ class UsageStatsForegroundInferenceTest {
     }
 
     @Test
-    fun pausesCurrentForegroundAppToUnknown() {
+    fun keepsCurrentForegroundPackageAcrossLonePauseEvent() {
         val foreground = inferForegroundPackageFromEvents(
             previousPackage = "com.example.social",
             ownPackageName = "com.monofocus.app",
@@ -35,7 +35,7 @@ class UsageStatsForegroundInferenceTest {
             ),
         )
 
-        assertNull(foreground)
+        assertEquals("com.example.social", foreground)
     }
 
     @Test
@@ -69,7 +69,7 @@ class UsageStatsForegroundInferenceTest {
     }
 
     @Test
-    fun clearsPackageWhenOnlyForegroundActivityStops() {
+    fun keepsForegroundPackageAcrossLoneActivityStop() {
         val foreground = inferForegroundPackageFromEvents(
             previousPackage = null,
             ownPackageName = "com.monofocus.app",
@@ -89,7 +89,31 @@ class UsageStatsForegroundInferenceTest {
             ),
         )
 
-        assertNull(foreground)
+        assertEquals("com.example.social", foreground)
+    }
+
+    @Test
+    fun replacesPausedPackageWhenAnotherPackageResumes() {
+        val foreground = inferForegroundPackageFromEvents(
+            previousPackage = "com.example.social",
+            ownPackageName = "com.monofocus.app",
+            events = listOf(
+                UsageEventSnapshot(
+                    packageName = "com.example.social",
+                    className = "com.example.social.MainActivity",
+                    eventType = UsageEvents.Event.ACTIVITY_PAUSED,
+                    eventTimeMillis = 1_000L,
+                ),
+                UsageEventSnapshot(
+                    packageName = "com.example.launcher",
+                    className = "com.example.launcher.LauncherActivity",
+                    eventType = UsageEvents.Event.ACTIVITY_RESUMED,
+                    eventTimeMillis = 2_000L,
+                ),
+            ),
+        )
+
+        assertEquals("com.example.launcher", foreground)
     }
 
     @Test
@@ -146,7 +170,7 @@ class UsageStatsForegroundInferenceTest {
 
         assertEquals("com.google.android.calendar", firstWindow)
         assertEquals("com.google.android.calendar", overlappingWindow)
-        assertNull(finalWindow)
+        assertEquals("com.google.android.calendar", finalWindow)
     }
 
     @Test

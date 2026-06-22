@@ -43,6 +43,36 @@ class FocusEngineTest {
     }
 
     @Test
+    fun periodicallyReassertsActiveGrayscaleForStableSelectedForegroundPackage() = runTest {
+        var nowEpochMillis = 0L
+        val repository = FakeRepository(selectedPackages = setOf("com.example.social"))
+        val detector = FakeForegroundAppDetector(initialPackage = "com.example.social")
+        val controller = FakeGrayscaleController()
+        val engine = FocusEngine(
+            repository = repository,
+            foregroundAppDetector = detector,
+            grayscaleController = controller,
+            permissionChecker = FakePermissions(),
+            wallClockMillis = { nowEpochMillis },
+            wallClockIntervalMillis = 1_000L,
+            activeReassertIntervalMillis = 1_000L,
+        )
+
+        val job = launch {
+            engine.run { }
+        }
+        runCurrent()
+
+        nowEpochMillis = 1_000L
+        advanceTimeBy(1_000L)
+        runCurrent()
+
+        assertEquals(listOf(true, true), controller.activeRequests)
+
+        job.cancelAndJoin()
+    }
+
+    @Test
     fun pauseTemporarilyDeactivatesWithoutDisablingEngineAndResumesAfterDeadline() = runTest {
         var nowEpochMillis = 1_000L
         val repository = FakeRepository(selectedPackages = setOf("com.example.social"))
@@ -94,7 +124,8 @@ class FocusEngineTest {
         engine.run { reason -> stopReasons += reason }
 
         assertEquals(listOf(EngineStopReason.NoSelectedApps), stopReasons)
-        assertFalse(repository.engineEnabled.firstValue())
+        assertTrue(repository.engineEnabled.firstValue())
+        assertEquals(EngineStopReason.NoSelectedApps, repository.lastStopReason())
         assertTrue(controller.deactivationCount >= 1)
     }
 
@@ -136,7 +167,8 @@ class FocusEngineTest {
         engine.run { reason -> stopReasons += reason }
 
         assertEquals(listOf(EngineStopReason.RuleUnavailable), stopReasons)
-        assertFalse(repository.engineEnabled.firstValue())
+        assertTrue(repository.engineEnabled.firstValue())
+        assertEquals(EngineStopReason.RuleUnavailable, repository.lastStopReason())
         assertTrue(controller.deactivationCount >= 1)
     }
 
@@ -164,7 +196,8 @@ class FocusEngineTest {
         runCurrent()
 
         assertEquals(listOf(EngineStopReason.PermissionsMissing), stopReasons)
-        assertFalse(repository.engineEnabled.firstValue())
+        assertTrue(repository.engineEnabled.firstValue())
+        assertEquals(EngineStopReason.PermissionsMissing, repository.lastStopReason())
         assertTrue(controller.deactivationCount >= 1)
 
         job.cancelAndJoin()
@@ -217,7 +250,8 @@ class FocusEngineTest {
         runCurrent()
 
         assertEquals(listOf(EngineStopReason.PermissionsMissing), stopReasons)
-        assertFalse(repository.engineEnabled.firstValue())
+        assertTrue(repository.engineEnabled.firstValue())
+        assertEquals(EngineStopReason.PermissionsMissing, repository.lastStopReason())
         assertTrue(controller.deactivationCount >= 1)
 
         job.cancelAndJoin()
@@ -247,7 +281,8 @@ class FocusEngineTest {
         runCurrent()
 
         assertEquals(listOf(EngineStopReason.PermissionsMissing), stopReasons)
-        assertFalse(repository.engineEnabled.firstValue())
+        assertTrue(repository.engineEnabled.firstValue())
+        assertEquals(EngineStopReason.PermissionsMissing, repository.lastStopReason())
         assertTrue(controller.deactivationCount >= 1)
 
         job.cancelAndJoin()
@@ -270,7 +305,8 @@ class FocusEngineTest {
         runCurrent()
 
         assertEquals(listOf(EngineStopReason.NoSelectedApps), stopReasons)
-        assertFalse(repository.engineEnabled.firstValue())
+        assertTrue(repository.engineEnabled.firstValue())
+        assertEquals(EngineStopReason.NoSelectedApps, repository.lastStopReason())
         assertTrue(controller.deactivationCount >= 1)
 
         job.join()
@@ -278,7 +314,7 @@ class FocusEngineTest {
     }
 
     @Test
-    fun stopsOnGrayscaleControllerFailure() = runTest {
+    fun stopsWithRuleUnavailableWhenGrayscaleControllerFails() = runTest {
         val repository = FakeRepository(selectedPackages = setOf("com.example.social"))
         val controller = FakeGrayscaleController(throwOnSetActive = true)
         val stopReasons = mutableListOf<EngineStopReason>()
@@ -291,8 +327,9 @@ class FocusEngineTest {
 
         engine.run { reason -> stopReasons += reason }
 
-        assertEquals(listOf(EngineStopReason.InternalError), stopReasons)
-        assertFalse(repository.engineEnabled.firstValue())
+        assertEquals(listOf(EngineStopReason.RuleUnavailable), stopReasons)
+        assertTrue(repository.engineEnabled.firstValue())
+        assertEquals(EngineStopReason.RuleUnavailable, repository.lastStopReason())
         assertTrue(controller.deactivationCount >= 1)
     }
 
@@ -311,12 +348,13 @@ class FocusEngineTest {
         engine.run { reason -> stopReasons += reason }
 
         assertEquals(listOf(EngineStopReason.NoSelectedApps), stopReasons)
-        assertFalse(repository.engineEnabled.firstValue())
+        assertTrue(repository.engineEnabled.firstValue())
+        assertEquals(EngineStopReason.NoSelectedApps, repository.lastStopReason())
         assertTrue(controller.deactivationCount >= 1)
     }
 
     @Test
-    fun disablesAndReportsInternalErrorWhenActivationAndCleanupFail() = runTest {
+    fun keepsEngineEnabledWhenActivationAndCleanupFail() = runTest {
         val repository = FakeRepository(selectedPackages = setOf("com.example.social"))
         val controller = FakeGrayscaleController(
             throwOnSetActive = true,
@@ -332,8 +370,9 @@ class FocusEngineTest {
 
         engine.run { reason -> stopReasons += reason }
 
-        assertEquals(listOf(EngineStopReason.InternalError), stopReasons)
-        assertFalse(repository.engineEnabled.firstValue())
+        assertEquals(listOf(EngineStopReason.RuleUnavailable), stopReasons)
+        assertTrue(repository.engineEnabled.firstValue())
+        assertEquals(EngineStopReason.RuleUnavailable, repository.lastStopReason())
         assertTrue(controller.deactivationCount >= 1)
     }
 
@@ -389,6 +428,10 @@ class FocusEngineTest {
             settingsFlow.value = settingsFlow.value.copy(engineEnabled = enabled)
         }
 
+        override suspend fun setLastEngineStopReason(reason: EngineStopReason?) {
+            settingsFlow.value = settingsFlow.value.copy(lastEngineStopReason = reason)
+        }
+
         override suspend fun getZenRuleId(): String? =
             settingsFlow.value.zenRuleId
 
@@ -413,6 +456,9 @@ class FocusEngineTest {
         fun replaceSelectedPackages(packages: Set<String>) {
             settingsFlow.value = settingsFlow.value.copy(selectedPackageNames = packages)
         }
+
+        suspend fun lastStopReason(): EngineStopReason? =
+            settings.first().lastEngineStopReason
     }
 
     private class FakeForegroundAppDetector(

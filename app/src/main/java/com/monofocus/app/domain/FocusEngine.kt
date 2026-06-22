@@ -17,6 +17,7 @@ class FocusEngine(
     private val permissionChecker: PermissionStatusProvider,
     private val wallClockMillis: () -> Long = System::currentTimeMillis,
     private val wallClockIntervalMillis: Long = WALL_CLOCK_INTERVAL_MILLIS,
+    private val activeReassertIntervalMillis: Long = ACTIVE_REASSERT_INTERVAL_MILLIS,
 ) {
     suspend fun run(onStopRequested: suspend (EngineStopReason) -> Unit) {
         var stopReason: EngineStopReason? = null
@@ -28,7 +29,10 @@ class FocusEngine(
         suspend fun stop(reason: EngineStopReason) {
             stopReason = reason
             deactivateSafely()
-            repository.setEngineEnabled(false)
+            repository.setLastEngineStopReason(reason)
+            if (reason == EngineStopReason.EngineDisabled || reason == EngineStopReason.InternalError) {
+                repository.setEngineEnabled(false)
+            }
             onStopRequested(reason)
         }
 
@@ -56,6 +60,7 @@ class FocusEngine(
             }
 
             var lastAppliedActive: Boolean? = null
+            var lastActiveRequestEpochMillis = 0L
             combine(
                 repository.settings,
                 foregroundAppDetector.observeForegroundPackage(),
@@ -102,9 +107,27 @@ class FocusEngine(
                             pausedUntilEpochMillis = inputs.settings.pausedUntilEpochMillis,
                             nowEpochMillis = inputs.nowEpochMillis,
                         )
-                        if (shouldBeActive != lastAppliedActive) {
-                            grayscaleController.setGrayscaleActive(shouldBeActive)
+                        if (
+                            shouldBeActive != lastAppliedActive ||
+                            shouldReassertActiveGrayscale(
+                                shouldBeActive = shouldBeActive,
+                                lastAppliedActive = lastAppliedActive,
+                                lastActiveRequestEpochMillis = lastActiveRequestEpochMillis,
+                                nowEpochMillis = inputs.nowEpochMillis,
+                            )
+                        ) {
+                            runCatching {
+                                grayscaleController.setGrayscaleActive(shouldBeActive)
+                            }.getOrElse {
+                                stop(EngineStopReason.RuleUnavailable)
+                                throw EngineStoppedException("Grayscale rule unavailable")
+                            }
                             lastAppliedActive = shouldBeActive
+                            lastActiveRequestEpochMillis = if (shouldBeActive) {
+                                inputs.nowEpochMillis
+                            } else {
+                                0L
+                            }
                         }
                     }
                 }
@@ -131,6 +154,16 @@ class FocusEngine(
         }
     }.distinctUntilChanged()
 
+    private fun shouldReassertActiveGrayscale(
+        shouldBeActive: Boolean,
+        lastAppliedActive: Boolean?,
+        lastActiveRequestEpochMillis: Long,
+        nowEpochMillis: Long,
+    ): Boolean =
+        shouldBeActive &&
+            lastAppliedActive == true &&
+            nowEpochMillis - lastActiveRequestEpochMillis >= activeReassertIntervalMillis
+
     private fun observeWallClock() = flow {
         while (currentCoroutineContext().isActive) {
             emit(wallClockMillis())
@@ -148,6 +181,7 @@ class FocusEngine(
     private companion object {
         const val PERMISSION_CHECK_INTERVAL_MILLIS = 1_000L
         const val WALL_CLOCK_INTERVAL_MILLIS = 1_000L
+        const val ACTIVE_REASSERT_INTERVAL_MILLIS = 2_000L
     }
 
     private class EngineStoppedException(message: String) : RuntimeException(message)

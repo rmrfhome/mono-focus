@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.monofocus.app.AppContainer
 import com.monofocus.app.domain.AppEntry
+import com.monofocus.app.domain.EngineStopReason
 import com.monofocus.app.domain.deactivateBestEffort
 import com.monofocus.app.service.FocusMonitorService
 import kotlinx.coroutines.Dispatchers
@@ -50,27 +51,25 @@ class MonoFocusViewModel(
     val uiState = combine(
         listInputs,
         showPrivacy,
-        container.repository.selectedPackages,
-        container.repository.engineEnabled,
-    ) { inputs, privacyVisible, selectedPackages, engineEnabled ->
+        container.repository.settings,
+    ) { inputs, privacyVisible, settings ->
         val selectedLaunchablePackageCount = selectedLaunchablePackageCount(
             apps = inputs.apps,
-            selectedPackages = selectedPackages,
+            selectedPackages = settings.selectedPackageNames,
         )
         MonoFocusUiState(
             supportedApi = inputs.permissions.supportedApi,
             permissionState = inputs.permissions,
             apps = buildPresentedApps(
                 apps = inputs.apps,
-                selectedPackages = selectedPackages,
+                selectedPackages = settings.selectedPackageNames,
                 searchQuery = inputs.query,
                 showSelectedOnly = inputs.selectedOnly,
             ),
             searchQuery = inputs.query,
             showSelectedOnly = inputs.selectedOnly,
-            engineEnabled = engineEnabled &&
-                inputs.permissions.ready &&
-                selectedLaunchablePackageCount > 0,
+            engineEnabled = settings.engineEnabled,
+            lastEngineStopReason = settings.lastEngineStopReason,
             selectedPackageCount = selectedLaunchablePackageCount,
             loadingApps = inputs.loading,
             showPrivacy = privacyVisible,
@@ -112,16 +111,7 @@ class MonoFocusViewModel(
     fun setPackageSelected(packageName: String, selected: Boolean) {
         viewModelScope.launch {
             container.repository.setPackageSelected(packageName, selected)
-            val selectedPackages = container.repository.selectedPackages.first()
-            if (
-                !hasSelectedLaunchableApps(
-                    apps = baseApps.value,
-                    selectedPackages = selectedPackages,
-                ) &&
-                container.repository.engineEnabled.first()
-            ) {
-                setEngineEnabled(false)
-            }
+            reconcileEngineService()
         }
     }
 
@@ -142,9 +132,17 @@ class MonoFocusViewModel(
                 )
             ) {
                 EngineToggleAction.EnableAndStart -> {
+                    container.repository.setLastEngineStopReason(null)
                     container.repository.setPausedUntilEpochMillis(0L)
                     container.repository.setEngineEnabled(true)
                     FocusMonitorService.start(context)
+                }
+                EngineToggleAction.EnableWithoutStarting -> {
+                    container.repository.setLastEngineStopReason(runtimeBlockReason(permissions.ready))
+                    container.repository.setPausedUntilEpochMillis(0L)
+                    container.repository.setEngineEnabled(true)
+                    container.grayscaleController.deactivateBestEffort()
+                    FocusMonitorService.stopMonitoringOnly(context)
                 }
                 EngineToggleAction.DisableAndStop -> disableAndStopEngine()
             }
@@ -196,12 +194,19 @@ class MonoFocusViewModel(
             ) {
                 EngineResumeAction.EnsureRuleAndStart -> {
                     if (container.grayscaleController.ensureReady()) {
+                        container.repository.setLastEngineStopReason(null)
                         FocusMonitorService.start(context)
                     } else {
-                        disableAndStopEngine()
+                        container.repository.setLastEngineStopReason(EngineStopReason.RuleUnavailable)
+                        container.grayscaleController.deactivateBestEffort()
+                        FocusMonitorService.stopMonitoringOnly(context)
                     }
                 }
-                EngineResumeAction.DisableAndStop -> disableAndStopEngine()
+                EngineResumeAction.StopMonitoringOnly -> {
+                    container.repository.setLastEngineStopReason(runtimeBlockReason(permissions.ready))
+                    container.grayscaleController.deactivateBestEffort()
+                    FocusMonitorService.stopMonitoringOnly(context)
+                }
                 EngineResumeAction.DeactivateOnly -> {
                     container.grayscaleController.deactivateBestEffort()
                 }
@@ -211,10 +216,18 @@ class MonoFocusViewModel(
 
     private suspend fun disableAndStopEngine() {
         container.repository.setEngineEnabled(false)
+        container.repository.setLastEngineStopReason(null)
         container.repository.setPausedUntilEpochMillis(0L)
         container.grayscaleController.deactivateBestEffort()
         FocusMonitorService.stop(context)
     }
+
+    private fun runtimeBlockReason(permissionsReady: Boolean): EngineStopReason =
+        if (permissionsReady) {
+            EngineStopReason.NoSelectedApps
+        } else {
+            EngineStopReason.PermissionsMissing
+        }
 
     class Factory(
         private val context: Context,

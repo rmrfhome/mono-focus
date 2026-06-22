@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import androidx.core.content.ContextCompat
 import com.monofocus.app.domain.deactivateBestEffort
+import com.monofocus.app.domain.EngineStopReason
 import com.monofocus.app.platform.handleSelectedPackageRemoved
 import com.monofocus.app.service.FocusMonitorService
 import kotlinx.coroutines.CoroutineScope
@@ -49,8 +50,8 @@ class MonoFocusApplication : Application() {
             applicationScope.launch {
                 try {
                     container.grayscaleController.deactivateBestEffort()
-                    container.repository.setEngineEnabled(false)
-                    FocusMonitorService.stop(context)
+                    container.repository.setLastEngineStopReason(EngineStopReason.PermissionsMissing)
+                    FocusMonitorService.stopMonitoringOnly(context)
                 } finally {
                     pendingResult.finish()
                 }

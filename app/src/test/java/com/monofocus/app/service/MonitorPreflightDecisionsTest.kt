@@ -1,6 +1,9 @@
 package com.monofocus.app.service
 
+import com.monofocus.app.domain.EngineStopReason
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -42,6 +45,45 @@ class MonitorPreflightDecisionsTest {
     fun doesNotStartForegroundMonitoringWhenNoSelectedLaunchableAppsRemain() {
         assertFalse(
             shouldStartForegroundMonitoring(
+                engineEnabled = true,
+                permissionsReady = true,
+                hasSelectedLaunchableApps = false,
+            ),
+        )
+    }
+
+    @Test
+    fun reportsNoBlockReasonWhenMonitoringCanStart() {
+        assertNull(
+            monitoringStartBlockReason(
+                engineEnabled = true,
+                permissionsReady = true,
+                hasSelectedLaunchableApps = true,
+            ),
+        )
+    }
+
+    @Test
+    fun reportsPreflightBlockReasonInPriorityOrder() {
+        assertEquals(
+            EngineStopReason.EngineDisabled,
+            monitoringStartBlockReason(
+                engineEnabled = false,
+                permissionsReady = false,
+                hasSelectedLaunchableApps = false,
+            ),
+        )
+        assertEquals(
+            EngineStopReason.PermissionsMissing,
+            monitoringStartBlockReason(
+                engineEnabled = true,
+                permissionsReady = false,
+                hasSelectedLaunchableApps = false,
+            ),
+        )
+        assertEquals(
+            EngineStopReason.NoSelectedApps,
+            monitoringStartBlockReason(
                 engineEnabled = true,
                 permissionsReady = true,
                 hasSelectedLaunchableApps = false,

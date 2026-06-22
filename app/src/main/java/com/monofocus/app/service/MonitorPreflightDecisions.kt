@@ -1,5 +1,7 @@
 package com.monofocus.app.service
 
+import com.monofocus.app.domain.EngineStopReason
+
 internal fun shouldRunMonitor(
     engineEnabled: Boolean,
     permissionsReady: Boolean,
@@ -15,3 +17,15 @@ internal fun shouldStartForegroundMonitoring(
     permissionsReady = permissionsReady,
     hasSelectedLaunchableApps = hasSelectedLaunchableApps,
 )
+
+internal fun monitoringStartBlockReason(
+    engineEnabled: Boolean,
+    permissionsReady: Boolean,
+    hasSelectedLaunchableApps: Boolean,
+): EngineStopReason? =
+    when {
+        !engineEnabled -> EngineStopReason.EngineDisabled
+        !permissionsReady -> EngineStopReason.PermissionsMissing
+        !hasSelectedLaunchableApps -> EngineStopReason.NoSelectedApps
+        else -> null
+    }

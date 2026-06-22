@@ -29,9 +29,9 @@ class EngineServiceDecisionsTest {
     }
 
     @Test
-    fun toggleDisablesAndStopsWhenPermissionsAreMissing() {
+    fun toggleStoresEnabledIntentWithoutStartingWhenPermissionsAreMissing() {
         assertEquals(
-            EngineToggleAction.DisableAndStop,
+            EngineToggleAction.EnableWithoutStarting,
             chooseEngineToggleAction(
                 requestedEnabled = true,
                 permissionsReady = false,
@@ -41,9 +41,9 @@ class EngineServiceDecisionsTest {
     }
 
     @Test
-    fun toggleDisablesAndStopsWhenNoAppsAreSelected() {
+    fun toggleStoresEnabledIntentWithoutStartingWhenNoAppsAreSelected() {
         assertEquals(
-            EngineToggleAction.DisableAndStop,
+            EngineToggleAction.EnableWithoutStarting,
             chooseEngineToggleAction(
                 requestedEnabled = true,
                 permissionsReady = true,
@@ -65,9 +65,9 @@ class EngineServiceDecisionsTest {
     }
 
     @Test
-    fun resumeDisablesAndStopsWhenPersistedEnabledButPermissionsAreMissing() {
+    fun resumeStopsMonitoringOnlyWhenPersistedEnabledButPermissionsAreMissing() {
         assertEquals(
-            EngineResumeAction.DisableAndStop,
+            EngineResumeAction.StopMonitoringOnly,
             chooseEngineResumeAction(
                 engineEnabled = true,
                 permissionsReady = false,
@@ -77,9 +77,9 @@ class EngineServiceDecisionsTest {
     }
 
     @Test
-    fun resumeDisablesAndStopsWhenPersistedEnabledButNoAppsAreSelected() {
+    fun resumeStopsMonitoringOnlyWhenPersistedEnabledButNoAppsAreSelected() {
         assertEquals(
-            EngineResumeAction.DisableAndStop,
+            EngineResumeAction.StopMonitoringOnly,
             chooseEngineResumeAction(
                 engineEnabled = true,
                 permissionsReady = true,

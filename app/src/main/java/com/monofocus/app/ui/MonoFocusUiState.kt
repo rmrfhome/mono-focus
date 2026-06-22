@@ -1,6 +1,7 @@
 package com.monofocus.app.ui
 
 import com.monofocus.app.domain.AppEntry
+import com.monofocus.app.domain.EngineStopReason
 import com.monofocus.app.platform.PermissionState
 
 data class MonoFocusUiState(
@@ -15,6 +16,7 @@ data class MonoFocusUiState(
     val searchQuery: String = "",
     val showSelectedOnly: Boolean = false,
     val engineEnabled: Boolean = false,
+    val lastEngineStopReason: EngineStopReason? = null,
     val selectedPackageCount: Int = 0,
     val loadingApps: Boolean = true,
     val showPrivacy: Boolean = false,
