@@ -4,8 +4,8 @@ Use this file to record release-blocking device and Play Console validation. Do 
 
 ## Build Under Test
 
-- App version: `0.1.0`
-- Version code: `1`
+- App version: `0.1.1`
+- Version code: `2`
 - Artifact: `app/build/outputs/bundle/release/app-release.aab`
 - Verifier command: `.\tools\verify-release.ps1`
 - Verifier result/date: PASS on 2026-06-22 with Gradle release configuration, APK/AAB artifact inspection, Android/custom permission surface, cleanup-only boot receiver checks, launcher-only package visibility, app-owned manifest component/exported flag, required UI/privacy copy, Play Store/Data Safety draft, foreground-service string, and unsupported API/policy checks

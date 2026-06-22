@@ -245,8 +245,8 @@ $aaptPath = Find-Aapt $resolvedSdkDir
 $expectedApplicationId = "com.rmrfhome.monofocus"
 $expectedNamespace = "com.monofocus.app"
 $expectedDynamicReceiverPermission = "$expectedApplicationId.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
-$expectedVersionCode = "1"
-$expectedVersionName = "0.1.0"
+$expectedVersionCode = "2"
+$expectedVersionName = "0.1.1"
 
 $apkMetadata = Get-Content -LiteralPath $apkMetadataPath -Raw | ConvertFrom-Json
 $apkMetadataElements = @($apkMetadata.elements)
@@ -604,11 +604,11 @@ if ($appBuildGradle -notmatch 'minSdk\s*=\s*35') {
 if ($appBuildGradle -notmatch 'targetSdk\s*=\s*35') {
     Fail "Gradle targetSdk is not 35."
 }
-if ($appBuildGradle -notmatch 'versionCode\s*=\s*1') {
-    Fail "Gradle versionCode is not 1."
+if ($appBuildGradle -notmatch 'versionCode\s*=\s*2') {
+    Fail "Gradle versionCode is not 2."
 }
-if ($appBuildGradle -notmatch 'versionName\s*=\s*"0\.1\.0"') {
-    Fail "Gradle versionName is not 0.1.0."
+if ($appBuildGradle -notmatch 'versionName\s*=\s*"0\.1\.1"') {
+    Fail "Gradle versionName is not 0.1.1."
 }
 if ($appBuildGradle -notmatch '(?s)release\s*\{.*isMinifyEnabled\s*=\s*true.*\}') {
     Fail "Release build type does not enable R8/minification."
