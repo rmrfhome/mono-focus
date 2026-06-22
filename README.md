@@ -22,8 +22,34 @@ From the repository root:
 Outputs:
 
 - Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
-- Release APK: `app/build/outputs/apk/release/app-release-unsigned.apk`
+- Release APK: `app/build/outputs/apk/release/app-release.apk` when signing is configured; otherwise `app/build/outputs/apk/release/app-release-unsigned.apk`
 - Release AAB: `app/build/outputs/bundle/release/app-release.aab`
+
+## Play Upload Signing
+
+`bundleRelease` signs the release AAB when local signing properties are configured.
+Keep key material and passwords out of git.
+
+Add this to ignored `local.properties`:
+
+```properties
+monofocus.signing.properties=G:/My Drive/mobile-app-keys/play-upload-key.properties
+```
+
+The signing properties file should contain:
+
+```properties
+storeFile=monofocus-upload.jks
+storePassword=...
+keyAlias=...
+keyPassword=...
+```
+
+Relative `storeFile` paths are resolved from the signing properties file's folder.
+Run `.\gradlew.bat bundleRelease`; the Play Console upload artifact is
+`app/build/outputs/bundle/release/app-release.aab`.
+When local signing is configured, `.\tools\verify-release.ps1` also checks that
+the AAB contains upload-signature entries.
 
 ## Verification Notes
 
@@ -46,7 +72,7 @@ The release artifact should not request network or broad package visibility perm
 
 ```powershell
 $env:ANDROID_HOME = "<path-to-android-sdk>"
-& "$env:ANDROID_HOME\build-tools\34.0.0\aapt.exe" dump permissions app/build/outputs/apk/release/app-release-unsigned.apk
+& "$env:ANDROID_HOME\build-tools\34.0.0\aapt.exe" dump permissions app/build/outputs/apk/release/app-release.apk
 ```
 
 Expected Android permissions:

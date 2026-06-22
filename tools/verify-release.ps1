@@ -223,7 +223,6 @@ if (-not $SkipBuild) {
     Invoke-Checked $gradlew @("lint", "testDebugUnitTest", "assembleDebug", "assembleRelease", "bundleRelease")
 }
 
-$apkPath = Require-File (Join-Path $repoRoot "app/build/outputs/apk/release/app-release-unsigned.apk")
 $aabPath = Require-File (Join-Path $repoRoot "app/build/outputs/bundle/release/app-release.aab")
 $apkMetadataPath = Require-File (Join-Path $repoRoot "app/build/outputs/apk/release/output-metadata.json")
 $dependencyMetadataPath = Require-File (Join-Path $repoRoot "app/build/outputs/sdk-dependencies/release/sdkDependencies.txt")
@@ -248,6 +247,16 @@ $expectedNamespace = "com.monofocus.app"
 $expectedDynamicReceiverPermission = "$expectedApplicationId.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
 $expectedVersionCode = "1"
 $expectedVersionName = "0.1.0"
+
+$apkMetadata = Get-Content -LiteralPath $apkMetadataPath -Raw | ConvertFrom-Json
+$apkMetadataElements = @($apkMetadata.elements)
+$apkMetadataElement = $apkMetadataElements |
+    Where-Object { $_.outputFile -match '^app-release(-unsigned)?\.apk$' } |
+    Select-Object -First 1
+if ($null -eq $apkMetadataElement) {
+    Fail "Release APK output metadata does not list an expected release APK output."
+}
+$apkPath = Require-File (Join-Path $repoRoot "app/build/outputs/apk/release/$($apkMetadataElement.outputFile)")
 
 Write-Step "checking release APK permissions"
 $permissions = & $aaptPath dump permissions $apkPath
@@ -338,7 +347,6 @@ if ($badgingText -notmatch "targetSdkVersion:'35'") {
 }
 
 Write-Step "checking release APK output metadata"
-$apkMetadata = Get-Content -LiteralPath $apkMetadataPath -Raw | ConvertFrom-Json
 if ($apkMetadata.applicationId -ne $expectedApplicationId) {
     Fail "Release APK output metadata applicationId is not $expectedApplicationId."
 }
@@ -347,13 +355,6 @@ if ($apkMetadata.variantName -ne "release") {
 }
 if ([int]$apkMetadata.minSdkVersionForDexing -ne 35) {
     Fail "Release APK output metadata minSdkVersionForDexing is not 35."
-}
-$apkMetadataElements = @($apkMetadata.elements)
-$apkMetadataElement = $apkMetadataElements |
-    Where-Object { $_.outputFile -eq "app-release-unsigned.apk" } |
-    Select-Object -First 1
-if ($null -eq $apkMetadataElement) {
-    Fail "Release APK output metadata does not list app-release-unsigned.apk."
 }
 if ([int]$apkMetadataElement.versionCode -ne [int]$expectedVersionCode) {
     Fail "Release APK output metadata versionCode is not $expectedVersionCode."
@@ -390,6 +391,29 @@ $aabModuleManifests = @(
 )
 if ($aabModuleManifests.Count -ne 1 -or $aabModuleManifests[0] -ne "base/manifest/AndroidManifest.xml") {
     Fail "Release AAB must contain exactly one base module manifest."
+}
+
+$localPropertiesPath = Join-Path $repoRoot "local.properties"
+$localPropertiesText = if (Test-Path -LiteralPath $localPropertiesPath) {
+    Get-Content -LiteralPath $localPropertiesPath -Raw
+} else {
+    ""
+}
+$releaseSigningConfigured = (
+    -not [string]::IsNullOrWhiteSpace($env:MONOFOCUS_SIGNING_PROPERTIES)
+) -or (
+    $localPropertiesText -match '(?m)^\s*monofocus\.signing\.properties\s*='
+)
+if ($releaseSigningConfigured) {
+    Write-Step "checking release AAB signing"
+    $aabJarSignatureEntries = @(
+        $aabEntryNames | Where-Object { $_ -match '^META-INF/[^/]+\.(SF|RSA|DSA|EC)$' }
+    )
+    $hasSignatureFile = @($aabJarSignatureEntries | Where-Object { $_ -match '\.SF$' }).Count -gt 0
+    $hasSignatureBlock = @($aabJarSignatureEntries | Where-Object { $_ -match '\.(RSA|DSA|EC)$' }).Count -gt 0
+    if (-not $hasSignatureFile -or -not $hasSignatureBlock) {
+        Fail "Release AAB is not signed even though local release signing is configured."
+    }
 }
 
 $aabManifestText = Get-ZipEntryText $aabPath "base/manifest/AndroidManifest.xml"

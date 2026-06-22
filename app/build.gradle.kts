@@ -1,8 +1,59 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+fun loadProperties(file: File): Properties =
+    Properties().apply {
+        if (file.isFile) {
+            file.inputStream().use(::load)
+        }
+    }
+
+fun String?.notBlankOrNull(): String? =
+    this?.trim()?.takeIf { value -> value.isNotEmpty() }
+
+fun loadRawProperty(file: File, key: String): String? =
+    file.takeIf { it.isFile }
+        ?.readLines()
+        ?.firstNotNullOfOrNull { line ->
+            val trimmed = line.trim()
+            if (trimmed.startsWith("#") || trimmed.startsWith("!")) {
+                null
+            } else {
+                val separatorIndex = trimmed.indexOf("=")
+                if (separatorIndex <= 0) {
+                    null
+                } else {
+                    val rawKey = trimmed.substring(0, separatorIndex).trim()
+                    val rawValue = trimmed.substring(separatorIndex + 1).trim()
+                    rawValue.takeIf { rawKey == key }?.notBlankOrNull()
+                }
+            }
+        }
+
+fun File.resolveRelativeOrAbsolute(path: String): File {
+    val candidate = File(path)
+    if (candidate.isAbsolute) return candidate
+
+    val relativeToProperties = File(parentFile, path)
+    if (relativeToProperties.isFile) return relativeToProperties
+
+    return File(parentFile, candidate.name)
+}
+
+val localProperties = loadProperties(rootProject.file("local.properties"))
+val signingPropertiesFile = listOfNotNull(
+    localProperties.getProperty("monofocus.signing.properties").notBlankOrNull(),
+    System.getenv("MONOFOCUS_SIGNING_PROPERTIES").notBlankOrNull(),
+).firstNotNullOfOrNull { path ->
+    rootProject.file(path).takeIf { file -> file.isFile }
+}
+val signingProperties = signingPropertiesFile?.let(::loadProperties)
 
 android {
     namespace = "com.monofocus.app"
@@ -21,12 +72,33 @@ android {
         }
     }
 
+    signingConfigs {
+        if (signingPropertiesFile != null && signingProperties != null) {
+            create("playUpload") {
+                val storeFilePath = loadRawProperty(signingPropertiesFile, "storeFile")
+                    ?: signingProperties.getProperty("storeFile").notBlankOrNull()
+                    ?: error("storeFile is missing from ${signingPropertiesFile.path}")
+                storeFile = signingPropertiesFile.resolveRelativeOrAbsolute(storeFilePath)
+                storePassword = signingProperties.getProperty("storePassword")
+                    .notBlankOrNull()
+                    ?: error("storePassword is missing from ${signingPropertiesFile.path}")
+                keyAlias = signingProperties.getProperty("keyAlias")
+                    .notBlankOrNull()
+                    ?: error("keyAlias is missing from ${signingPropertiesFile.path}")
+                keyPassword = signingProperties.getProperty("keyPassword")
+                    .notBlankOrNull()
+                    ?: error("keyPassword is missing from ${signingPropertiesFile.path}")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
         release {
+            signingConfigs.findByName("playUpload")?.let { signingConfig = it }
             isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

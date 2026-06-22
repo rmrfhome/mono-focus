@@ -171,7 +171,7 @@ Remaining proof:
 - Verified: `assembleRelease` succeeds.
 - Verified: `bundleRelease` succeeds.
 - Verified: `lint` succeeds with 0 errors.
-- Verified: `aapt dump permissions app-release-unsigned.apk` shows no `INTERNET`, `QUERY_ALL_PACKAGES`, `SYSTEM_ALERT_WINDOW`, or `WRITE_SECURE_SETTINGS`.
+- Verified: `aapt dump permissions` on the release APK output shows no `INTERNET`, `QUERY_ALL_PACKAGES`, `SYSTEM_ALERT_WINDOW`, or `WRITE_SECURE_SETTINGS`.
 - Verified: `tools/verify-release.ps1` inspects the release AAB base manifest for expected MonoFocus package/component/permission markers, including `ACCESS_NOTIFICATION_POLICY` and cleanup-only `RECEIVE_BOOT_COMPLETED`, and rejects forbidden sensitive permissions in the Play-upload artifact.
 - Verified: `tools/verify-release.ps1` allows only the expected app-private AndroidX dynamic receiver custom permission outside Android's permission namespace.
 - Verified: release dependency metadata does not include analytics, ads, Retrofit, OkHttp, Firebase, Room, or Hilt.
@@ -187,7 +187,7 @@ Implementation evidence:
 Remaining proof:
 
 - Confirm Android 14 install rejection or verify the unsupported screen through a compatibility build/test harness.
-- Supporting release artifact evidence on 2026-06-12 shows `aapt dump badging app-release-unsigned.apk` reports `sdkVersion:'35'`, and release APK output metadata reports `minSdkVersionForDexing` 35.
+- Supporting release artifact evidence on 2026-06-12 shows `aapt dump badging app-release-unsigned.apk` reported `sdkVersion:'35'`; current release APK output metadata reports `minSdkVersionForDexing` 35.
 - Current build evidence: release output metadata shows `minSdkVersionForDexing` 35.
 
 ## Non-Functional and Play Readiness
